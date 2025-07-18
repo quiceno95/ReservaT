@@ -5,6 +5,7 @@ from starlette.background import BackgroundTask
 from starlette.types import Message
 from fastapi_pagination import add_pagination
 from routes.experiencias_routes import experiencias
+from fastapi.middleware.cors import CORSMiddleware
 
 
 # Configurar logging
@@ -24,6 +25,21 @@ app = FastAPI(
     description="API de gestión para las experiencias de los servicios en ReservaT",
     debug=True
 )
+
+# Agrega aquí tu dominio del frontend
+origins = [
+    "https://dashboard.reservatonline.com",
+    "http://localhost:3000",  # opcional para desarrollo local
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # O usa ["*"] si quieres permitir todo (no recomendado en producción)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 add_pagination(app)
 status_reasons = {x.value: x.name for x in list(HTTPStatus)}
 
