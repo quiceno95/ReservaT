@@ -155,3 +155,20 @@ async def eliminar_fecha_bloqueada(id_fecha: str, db: Session = Depends(get_db))
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El ID proporcionado no es un UUID válido"
         )
+
+# Endpoint de Health Check
+@fechas.get("/fechas/healthchecker")
+def get_live():
+    return {"message": "Fechas service is LIVE!!"}
+
+# Endpoint de Readiness
+@fechas.get("/fechas/readiness")
+def check_readiness(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("SELECT 1")).fetchone()
+        if result and result[0] == 1:
+            return {"status": "Ready"}
+        return {"status": "Not Ready"}
+    except Exception as e:
+        logger.error(f"Error en readiness check: {str(e)}")
+        return {"status": "Not Ready"}

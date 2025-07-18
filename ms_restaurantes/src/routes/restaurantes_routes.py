@@ -224,3 +224,20 @@ async def eliminar_restaurante(id_restaurante: str, db: Session = Depends(get_db
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El ID proporcionado no es un UUID válido"
         )
+
+# Endpoint de Health Check
+@restaurantes.get("/restaurantes/healthchecker")
+def get_live():
+    return {"message": "Restaurantes service is LIVE!!"}
+
+# Endpoint de Readiness
+@restaurantes.get("/restaurantes/readiness")
+def check_readiness(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("SELECT 1")).fetchone()
+        if result and result[0] == 1:
+            return {"status": "Ready"}
+        return {"status": "Not Ready"}
+    except Exception as e:
+        logger.error(f"Error en readiness check: {str(e)}")
+        return {"status": "Not Ready"}

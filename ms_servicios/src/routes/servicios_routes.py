@@ -179,3 +179,20 @@ async def eliminar_servicio(id_servicio: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El ID proporcionado no es un UUID válido"
         )
+
+# Endpoint de Health Check
+@servicios.get("/servicios/healthchecker")
+def get_live():
+    return {"message": "Servicios service is LIVE!!"}
+
+# Endpoint de Readiness
+@servicios.get("/servicios/readiness")
+def check_readiness(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("SELECT 1")).fetchone()
+        if result and result[0] == 1:
+            return {"status": "Ready"}
+        return {"status": "Not Ready"}
+    except Exception as e:
+        logger.error(f"Error en readiness check: {str(e)}")
+        return {"status": "Not Ready"}
