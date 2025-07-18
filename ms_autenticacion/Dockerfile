@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Set PYTHONPATH to include the src directory
+ENV PYTHONPATH=/app/src
+
 # Instalar dependencias del sistema necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
