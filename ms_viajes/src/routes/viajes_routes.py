@@ -32,7 +32,7 @@ viajes = APIRouter()
 async def crear_viaje(viaje: DatosViaje, db: Session = Depends(get_db)):
     """Crea un nuevas viajes  en la base de datos"""
     existing_ruta = db.query(RutasModel).filter(RutasModel.id == viaje.ruta_id).first()
-    existing_transportador = db.query(TransportesModel).filter(and_(TransportesModel.id == viaje.id_transportador)).first()
+    existing_transportador = db.query(TransportesModel).filter(and_(TransportesModel.id_transporte == viaje.id_transportador)).first()
 
     if existing_ruta is None:
         raise HTTPException(
@@ -85,7 +85,7 @@ async def listar_viajes(pagina: int = 0, limite: int = 100, db: Session = Depend
 async def listar_viajes(id_proveedor: str, pagina: int = 0, limite: int = 100, db: Session = Depends(get_db)):
     """Lista todas las fechas bloqueadas con paginación"""
    
-    existing_proveedor = db.query(TransportesModel).filter(and_(TransportesModel.id == id_proveedor)).first()
+    existing_proveedor = db.query(TransportesModel).filter(and_(TransportesModel.id_transporte == id_proveedor)).first()
 
     if existing_proveedor is None:
         raise HTTPException(
