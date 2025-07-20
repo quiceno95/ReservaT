@@ -150,16 +150,16 @@ async def eliminar_viaje(id_viaje: str, db: Session = Depends(get_db)):
     
     try:
         uuid_obj = UUID(id_viaje)
-        db_viaje = db.query(ViajesModel).filter(ViajesModel.id == id_viaje).filter(ViajesModel.activo == True).first()
+        db_viaje = db.query(ViajesModel).filter(ViajesModel.id == id_viaje).first()
         if not db_viaje:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Viaje no encontrada"
             )
-        if db_viaje.activo:
+        if db_viaje.activo == False:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="La viaje ya ha sido eliminada"
+                detail="EL viaje ya ha sido eliminada"
             )  
         try:
             db_viaje.activo = False
