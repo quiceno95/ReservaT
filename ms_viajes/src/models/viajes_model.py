@@ -37,7 +37,7 @@ class ViajesModel(Base):
     precio=Column(Integer)
     guia_asignado = Column(String)
     estado = Column(String, default='disponible', nullable=False)
-    id_transportador = Column(UUID(as_uuid=True), ForeignKey('usr_app.transportes.id'), nullable=False)
+    id_transportador = Column(UUID(as_uuid=True), ForeignKey('usr_app.transportes.id_transporte'), nullable=False)
     activo = Column(Boolean, default=True)
 
 
