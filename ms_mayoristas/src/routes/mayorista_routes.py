@@ -28,7 +28,7 @@ def get_db():
 
 mayorista = APIRouter()
 
-@mayorista.post("/mayorista", response_model=ResponseMessage)
+@mayorista.post("/mayorista/crear", response_model=ResponseMessage)
 async def crear_mayorista(mayorista: DatosMayorista, db: Session = Depends(get_db)):
     """Crea un nuevo mayorista en la base de datos"""
     existing_mayorista = db.query(Mayorista).filter(Mayorista.email == mayorista.email).first()
@@ -52,7 +52,7 @@ async def crear_mayorista(mayorista: DatosMayorista, db: Session = Depends(get_d
             detail="Error al crear mayorista"
         )
 
-@mayorista.get("/mayorista", response_model=ResponseList)
+@mayorista.get("/mayorista/listar/todo", response_model=ResponseList)
 async def listar_mayoristas(pagina: int = 0, limite: int = 100, db: Session = Depends(get_db)):
     """Lista todos los mayoristas con paginación"""
     try:
