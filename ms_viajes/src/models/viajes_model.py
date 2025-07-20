@@ -21,7 +21,7 @@ class TransportesModel(Base):
     __tablename__ = "transportes"
     __table_args__ = {'schema': 'usr_app'}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    id_transporte = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     tipo_vehiculo = Column(String, nullable=False)
 
 class ViajesModel(Base):
