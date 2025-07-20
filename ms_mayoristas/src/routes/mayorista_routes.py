@@ -52,7 +52,7 @@ async def crear_mayorista(mayorista: DatosMayorista, db: Session = Depends(get_d
             detail="Error al crear mayorista"
         )
 
-@mayorista.get("/mayorista/listar/todo", response_model=ResponseList)
+@mayorista.get("/mayorista/listar", response_model=ResponseList)
 async def listar_mayoristas(pagina: int = 0, limite: int = 100, db: Session = Depends(get_db)):
     """Lista todos los mayoristas con paginación"""
     try:
@@ -74,7 +74,7 @@ async def listar_mayoristas(pagina: int = 0, limite: int = 100, db: Session = De
             detail="Error al listar mayoristas"
         )
 
-@mayorista.get("/mayorista/listar/{id_mayorista}", response_model=RespuestaMayorista)
+@mayorista.get("/mayorista/consultar/{id_mayorista}", response_model=RespuestaMayorista)
 async def consultar_mayorista(id_mayorista: str, db: Session = Depends(get_db)):
     """Consulta un mayorista específico por su ID"""
     try:
@@ -92,8 +92,6 @@ async def consultar_mayorista(id_mayorista: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El ID proporcionado no es un UUID válido"
         )
-    
-  
         
 
 @mayorista.put("/mayorista/editar/{id_mayorista}", response_model=RespuestaMayorista)
@@ -110,7 +108,7 @@ async def actualizar_mayorista(id_mayorista: str, datos: ActualizarMayorista, db
     db.refresh(db_mayorista)
     return db_mayorista
 
-@mayorista.delete("/mayorista/{id_mayorista}", response_model=ResponseMessage)
+@mayorista.delete("/mayorista/eliminar/{id_mayorista}", response_model=ResponseMessage)
 async def eliminar_mayorista(id_mayorista: str, db: Session = Depends(get_db)):
     
     try:
