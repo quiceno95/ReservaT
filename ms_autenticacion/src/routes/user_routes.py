@@ -60,19 +60,19 @@ async def login_user(request: LoginRequest, db: Session = Depends(get_db), respo
     try:
         # Verificar si el email existe
         user = db.query(UserModel).filter(UserModel.email == request.email).first()
+
+        # Verificar si el usuario existe
+        if user == None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="El usuario no existe"
+            )
         
         # Verificar si el usuario esta activo
         if user.activo == False:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="El usuario no esta activo, comunicate con el administrador"
-            )
-        
-        # Verificar si el usuario esta activo
-        if user == None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="El usuario no existe"
             )
             
         # Verificar si las credenciales son correctas
