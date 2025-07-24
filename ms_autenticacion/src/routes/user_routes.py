@@ -71,7 +71,7 @@ async def login_user(request: LoginRequest, db: Session = Depends(get_db), respo
         # Verificar si el usuario esta activo
         if user.activo == False:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail="El usuario no esta activo, comunicate con el administrador"
             )
             
