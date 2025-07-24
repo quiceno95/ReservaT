@@ -90,7 +90,7 @@ async def login_user(request: LoginRequest, db: Session = Depends(get_db), respo
             db_user = db.query(ProveedorModel).filter(ProveedorModel.email == request.email).first()  
             userEmail = db_user.email
             userId = db_user.id_proveedor
-            tipo_U = db_user.tipo
+            tipo_u = db_user.tipo
             
         elif user.tipo_usuario == "mayorista":
             db_user = db.query(MayoristaModel).filter(MayoristaModel.email == request.email).first()
