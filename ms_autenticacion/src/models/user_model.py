@@ -29,6 +29,7 @@ class MayoristaModel(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     email = Column(String, unique=True)
+    
 
 class ProveedorModel(Base):
     __tablename__ = 'proveedores'
@@ -36,5 +37,6 @@ class ProveedorModel(Base):
     
     id_proveedor = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
     email = Column(String, unique=True)
+    tipo = Column(String)
 
 
