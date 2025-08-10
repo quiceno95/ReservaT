@@ -1,10 +1,9 @@
 from typing import Optional, List
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
 from uuid import UUID
 
 class DatosReserva(BaseModel):
-    servicio_id: UUID
     id_proveedor: UUID
     id_servicio: UUID
     id_mayorista: UUID
@@ -17,10 +16,11 @@ class DatosReserva(BaseModel):
     estado: str
     observaciones: str
     fecha_creacion: datetime
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
     cantidad: int
     
 class ActualizarReserva(BaseModel):
-    servicio_id: Optional[UUID] = None
     id_proveedor: Optional[UUID] = None
     id_servicio: Optional[UUID] = None
     id_mayorista: Optional[UUID] = None
@@ -33,6 +33,8 @@ class ActualizarReserva(BaseModel):
     estado: Optional[str] = None
     observaciones: Optional[str] = None
     fecha_creacion: Optional[datetime] = None
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
     cantidad: Optional[int] = None
 
 class RespuestaReserva(DatosReserva):

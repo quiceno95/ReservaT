@@ -3,6 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
 from datetime import datetime
+from sqlalchemy import Date
 
 Base = declarative_base()
 
@@ -20,13 +21,20 @@ class ReservaModel(Base):
     nombre_servicio = Column(String, nullable=False)
     descripcion = Column(String, nullable=True)
     tipo_servicio = Column(String, nullable=False)
-    precio = Column(Numeric(10, 2), nullable=False)
+    # En la BD 'precio' es character varying, se mapea como String
+    precio = Column(String, nullable=False)
     ciudad = Column(String, nullable=False)
+    # 'activo' ahora es booleano en BD
     activo = Column(Boolean, default=True)
     estado = Column(String, nullable=False)
     observaciones = Column(String, nullable=True)
-    fecha_creacion = Column(DateTime(timezone=True), default=datetime.utcnow)
-    cantidad = Column(Integer, nullable=False) 
+    # En la BD 'fecha_creacion' es date
+    fecha_creacion = Column(Date, default=datetime.utcnow)
+    # La columna ahora es 'cantidad' correctamente nombrada
+    cantidad = Column(Integer, nullable=False)
+    # Nuevas columnas de rango de fechas
+    fecha_inicio = Column(Date, nullable=True)
+    fecha_fin = Column(Date, nullable=True)
 
 class ServicioModel(Base):
     __tablename__ = "servicios"

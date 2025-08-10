@@ -1,14 +1,25 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy import select, and_, text
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import logging
 import uuid
 from uuid import UUID
 from fastapi.responses import JSONResponse
 from config.db2 import DB
-from models.reservas_model import ReservaModel, ServicioModel, ProveedorModel, MayoristaModel, ServicioModel
-from schemas.reservas_schema import DatosReserva, ActualizarReserva, RespuestaReserva, ResponseMessage, ResponseList
+from models.reservas_model import (
+    ReservaModel,
+    ServicioModel,
+    ProveedorModel,
+    MayoristaModel,
+)
+from schemas.reservas_schema import (
+    DatosReserva,
+    ActualizarReserva,
+    RespuestaReserva,
+    ResponseMessage,
+    ResponseList,
+)
 from typing import List
 from pydantic import ValidationError
 
@@ -28,163 +39,340 @@ def get_db():
 
 reservas = APIRouter()
 
-@reservas.post("/reservas/crear/", response_model=ResponseMessage)
-async def crear_reserva(reserva: DatosReserva, db: Session = Depends(get_db)):
-    """Crea un nuevas reservas  en la base de datos"""
-    existing_url = db.query(ReservaModel).filter(ReservaModel.url == reserva.url).first()
-    existing_servicio = db.query(ServicioModel).filter(and_(ServicioModel.id_servicio == reserva.servicio_id)).first()
-
-    if existing_url:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="la URL de la foto ya existe"
-        )
-    if existing_servicio is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="el servicio no existe"
-        )
+@reservas.post("/reservas/crear")
+async def crear_reserva(datos: DatosReserva, db: Session = Depends(get_db)):
+    """Crea una nueva reserva validando proveedor y mayorista"""
     try:
-        nuevo_foto = FotoModel(**foto.model_dump())
-        db.add(nuevo_foto)
+        # Validar existencia de proveedor
+        prov = db.query(ProveedorModel).filter(ProveedorModel.id_proveedor == str(datos.id_proveedor)).first()
+        if prov is None or (hasattr(ProveedorModel, "activo") and prov.activo is not None and prov.activo is False):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proveedor no encontrado o inactivo")
+
+        # Validar existencia de mayorista (opcional si viene)
+        if datos.id_mayorista is not None:
+            may = db.query(MayoristaModel).filter(MayoristaModel.id == str(datos.id_mayorista)).first()
+            if may is None or (hasattr(MayoristaModel, "activo") and may.activo is not None and may.activo is False):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mayorista no encontrado o inactivo")
+
+        # Validar existencia de servicio
+        serv = db.query(ServicioModel).filter(ServicioModel.id_servicio == str(datos.id_servicio)).first()
+        if serv is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado")
+
+        # Normalizar tipos según esquema real de BD
+        precio_str = str(datos.precio) if datos.precio is not None else None
+        # activo ahora es booleano
+        activo_val = bool(getattr(datos, 'activo', True))
+        # fechas
+        fecha_crea = datos.fecha_creacion.date() if hasattr(datos, 'fecha_creacion') and datos.fecha_creacion else None
+        fecha_inicio_val = datos.fecha_inicio if hasattr(datos, 'fecha_inicio') else None
+        fecha_fin_val = datos.fecha_fin if hasattr(datos, 'fecha_fin') else None
+
+        nueva = ReservaModel(
+            id_proveedor=str(datos.id_proveedor),
+            id_servicio=str(datos.id_servicio),
+            id_mayorista=str(datos.id_mayorista) if datos.id_mayorista is not None else None,
+            nombre_servicio=datos.nombre_servicio,
+            descripcion=datos.descripcion,
+            tipo_servicio=datos.tipo_servicio,
+            precio=precio_str,
+            ciudad=datos.ciudad,
+            activo=activo_val,
+            estado=datos.estado,
+            observaciones=datos.observaciones,
+            fecha_creacion=fecha_crea,
+            fecha_inicio=fecha_inicio_val,
+            fecha_fin=fecha_fin_val,
+            cantidad=datos.cantidad,
+        )
+
+        db.add(nueva)
         db.commit()
-        db.refresh(nuevo_foto)
-        return ResponseMessage(message="Foto creada exitosamente")
-        
+        db.refresh(nueva)
+
+        return {"message": "Reserva creada exitosamente", "id_reserva": str(nueva.id_reserva)}
+
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error en registro: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al crear la foto"
-        )
+        logger.error(f"Error al crear reserva: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error al crear la reserva")
 
-@reservas.get("/reservas/listar/", response_model=ResponseList)
-async def listar_fotos(pagina: int = 0, limite: int = 100, db: Session = Depends(get_db)):
-    """Lista todas las fechas bloqueadas con paginación"""
+@reservas.get("/reservas/listar/")
+async def listar_reservas(pagina: int = 1, limite: int = 100, db: Session = Depends(get_db)):
+    """Lista todas las reservas con paginación"""
     try:
-        skip = (pagina - 1) * pagina
-        total = db.query(FotoModel).filter(FotoModel.eliminado == False).count()
-        fotos = db.query(FotoModel).filter(FotoModel.eliminado == False).offset(skip).limit(limite).all()
-        
-        return ResponseList(
-            fotos=fotos,
-            total=total,
-            page=pagina,
-            size=limite
-        )
-        
+        if pagina < 1:
+            pagina = 1
+        if limite < 1:
+            limite = 100
+        skip = (pagina - 1) * limite
+
+        base_query = db.query(ReservaModel).filter(ReservaModel.activo == True)
+        total = base_query.count()
+        reservas_db = base_query.offset(skip).limit(limite).all()
+
+        # Serialización manual para evitar inconsistencias de schema
+        reservas_list = [
+            {
+                "id": str(r.id_reserva),
+                "id_proveedor": str(r.id_proveedor) if getattr(r, "id_proveedor", None) else None,
+                "id_servicio": str(r.id_servicio) if getattr(r, "id_servicio", None) else None,
+                "id_mayorista": str(r.id_mayorista) if getattr(r, "id_mayorista", None) else None,
+                "nombre_servicio": r.nombre_servicio,
+                "descripcion": r.descripcion,
+                "tipo_servicio": r.tipo_servicio,
+                "precio": r.precio,
+                "ciudad": r.ciudad,
+                "activo": r.activo,
+                "estado": r.estado,
+                "observaciones": r.observaciones,
+                "fecha_creacion": r.fecha_creacion,
+                "fecha_inicio": r.fecha_inicio,
+                "fecha_fin": r.fecha_fin,
+                "cantidad": r.cantidad,
+            }
+            for r in reservas_db
+        ]
+
+        return {
+            "reservas": reservas_list,
+            "total": total,
+            "page": pagina,
+            "size": limite,
+        }
+
     except Exception as e:
         logger.error(f"Error en listado: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al listar las fotos"
+            detail="Error al listar las reservas",
         )
 
-@reservas.get("/reservas/servicios/{id_servicio}", response_model=ResponseList)
-async def listar_reservas(id_servicio: str, pagina: int = 0, limite: int = 100, db: Session = Depends(get_db)):
-    """Lista todas las fechas bloqueadas con paginación"""
-   
-    existing_servicio = db.query(ServicioModel).filter(and_(ServicioModel.id_servicio == id_servicio)).first()
 
-    if existing_servicio is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="el servicio no existe"
-        )
+@reservas.get("/reservas/listar/proveedor/{id_proveedor}")
+async def listar_reservas_por_proveedor(id_proveedor: str, pagina: int = 1, limite: int = 100, db: Session = Depends(get_db)):
+    """Lista reservas por proveedor con paginación"""
     try:
-        skip = (pagina - 1) * pagina
-        total = db.query(FotoModel).filter(FotoModel.eliminado == False, FotoModel.servicio_id == id_servicio).count()
-        fotos = db.query(FotoModel).filter(FotoModel.eliminado == False, FotoModel.servicio_id == id_servicio).offset(skip).limit(limite).all()
-        
-        return ResponseList(
-            fotos=fotos,
-            total=total,
-            page=pagina,
-            size=limite
+        # Validar UUID
+        _ = UUID(id_proveedor)
+
+        if pagina < 1:
+            pagina = 1
+        if limite < 1:
+            limite = 100
+        skip = (pagina - 1) * limite
+
+        base_query = (
+            db.query(ReservaModel)
+            .filter(ReservaModel.id_proveedor == id_proveedor)
+            .filter(ReservaModel.activo == True)
         )
-        
-    except Exception as e:
-        logger.error(f"Error en listado: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al listar las fotos para el servicio: " + id_servicio
-        )
+        total = base_query.count()
+        reservas_db = base_query.offset(skip).limit(limite).all()
 
-@reservas.get("/reservas/consultar/{id_reserva}", response_model=RespuestaReserva)
-async def consultar_reserva(id_reserva: str, db: Session = Depends(get_db)):
-    """Consulta un mayorista específico por su ID"""
-    try:
-        uuid_obj = UUID(id_reserva)
+        reservas_list = [
+            {
+                "id": str(r.id_reserva),
+                "id_proveedor": str(r.id_proveedor) if getattr(r, "id_proveedor", None) else None,
+                "id_servicio": str(r.id_servicio) if getattr(r, "id_servicio", None) else None,
+                "id_mayorista": str(r.id_mayorista) if getattr(r, "id_mayorista", None) else None,
+                "nombre_servicio": r.nombre_servicio,
+                "descripcion": r.descripcion,
+                "tipo_servicio": r.tipo_servicio,
+                "precio": r.precio,
+                "ciudad": r.ciudad,
+                "activo": r.activo,
+                "estado": r.estado,
+                "observaciones": r.observaciones,
+                "fecha_creacion": r.fecha_creacion,
+                "fecha_inicio": r.fecha_inicio,
+                "fecha_fin": r.fecha_fin,
+                "cantidad": r.cantidad,
+            }
+            for r in reservas_db
+        ]
 
-        db_foto = db.query(FotoModel).filter(FotoModel.id == id_foto).filter(FotoModel.eliminado == False).first()
-
-        if db_foto is None:
-            raise HTTPException(status_code=404, detail="Foto no encontrado")
-
-        return db_foto
-
+        return {
+            "reservas": reservas_list,
+            "total": total,
+            "page": pagina,
+            "size": limite,
+        }
     except (ValueError, ValidationError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El ID proporcionado no es un UUID válido"
+            detail="El ID de proveedor no es un UUID válido",
         )
-    
-@reservas.put("/reservas/editar/{id_reserva}", response_model=RespuestaReserva)
-async def actualizar_reserva(id_reserva: str, datos: ActualizarReserva, db: Session = Depends(get_db)):
-    """Actualiza los datos de una fecha bloqueada existente"""
+    except Exception as e:
+        logger.error(f"Error al listar por proveedor: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al listar reservas por proveedor",
+        )
 
-    db_reserva = db.query(ReservaModel).filter(ReservaModel.id == id_reserva).filter(ReservaModel.eliminado == False).first()
-    if db_reserva is None:
-        raise HTTPException(status_code=404, detail="Foto no encontrado")
 
-    existing_servicio = db.query(Servicio).filter(and_(Servicio.id_servicio == datos.servicio_id)).first()
-    if existing_servicio is None:
+@reservas.get("/reservas/listar/mayorista/{id_mayorista}")
+async def listar_reservas_por_mayorista(id_mayorista: str, pagina: int = 1, limite: int = 100, db: Session = Depends(get_db)):
+    """Lista reservas por mayorista con paginación"""
+    try:
+        # Validar UUID
+        _ = UUID(id_mayorista)
+
+        if pagina < 1:
+            pagina = 1
+        if limite < 1:
+            limite = 100
+        skip = (pagina - 1) * limite
+
+        base_query = (
+            db.query(ReservaModel)
+            .filter(ReservaModel.id_mayorista == id_mayorista)
+            .filter(ReservaModel.activo == True)
+        )
+        total = base_query.count()
+        reservas_db = base_query.offset(skip).limit(limite).all()
+
+        reservas_list = [
+            {
+                "id": str(r.id_reserva),
+                "id_proveedor": str(r.id_proveedor) if getattr(r, "id_proveedor", None) else None,
+                "id_servicio": str(r.id_servicio) if getattr(r, "id_servicio", None) else None,
+                "id_mayorista": str(r.id_mayorista) if getattr(r, "id_mayorista", None) else None,
+                "nombre_servicio": r.nombre_servicio,
+                "descripcion": r.descripcion,
+                "tipo_servicio": r.tipo_servicio,
+                "precio": r.precio,
+                "ciudad": r.ciudad,
+                "activo": r.activo,
+                "estado": r.estado,
+                "observaciones": r.observaciones,
+                "fecha_creacion": r.fecha_creacion,
+                "cantidad": r.cantidad,
+            }
+            for r in reservas_db
+        ]
+
+        return {
+            "reservas": reservas_list,
+            "total": total,
+            "page": pagina,
+            "size": limite,
+        }
+    except (ValueError, ValidationError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="el servicio no existe"
+            detail="El ID de mayorista no es un UUID válido",
         )
-    
-    for key, value in datos.model_dump(exclude_unset=True).items():
-        setattr(db_foto, key, value)
-    
-    db.commit()
-    db.refresh(db_foto)
-    return db_foto
+    except Exception as e:
+        logger.error(f"Error al listar por mayorista: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al listar reservas por mayorista",
+        )
 
-@reservas.delete("/reservas/eliminar/{id_reserva}", response_model=ResponseMessage)
+
+@reservas.put("/reservas/editar/{id_reserva}")
+async def editar_reserva(id_reserva: str, datos: ActualizarReserva, db: Session = Depends(get_db)):
+    """Edita una reserva existente"""
+    try:
+        _ = UUID(id_reserva)
+    except (ValueError, ValidationError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El ID de la reserva no es un UUID válido",
+        )
+
+    reserva = db.query(ReservaModel).filter(ReservaModel.id_reserva == id_reserva).first()
+    if reserva is None:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+
+    try:
+        for key, value in datos.model_dump(exclude_unset=True).items():
+            # Asignación directa de campos del schema al modelo
+            setattr(reserva, key, value)
+
+        db.commit()
+        db.refresh(reserva)
+
+        return {"message": "Reserva actualizada exitosamente"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error al actualizar reserva: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al editar la reserva",
+        )
+
+
+@reservas.delete("/reservas/eliminar/{id_reserva}")
 async def eliminar_reserva(id_reserva: str, db: Session = Depends(get_db)):
-    
+    """Elimina lógicamente una reserva (activo = False)"""
     try:
-        uuid_obj = UUID(id_reserva)
-        db_reserva = db.query(ReservaModel).filter(ReservaModel.id == id_reserva).first()
-        if not db_fecha:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Foto no encontrada"
-            )
-        if db_fecha.eliminado:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="La foto ya ha sido eliminada"
-            )  
-        try:
-            db_fecha.eliminado = True
-            db.commit()
-            return ResponseMessage(message="Foto eliminada exitosamente") 
-            
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Error en eliminación: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Error al eliminar la foto"
-            )
+        _ = UUID(id_reserva)
     except (ValueError, ValidationError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El ID proporcionado no es un UUID válido"
+            detail="El ID de la reserva no es un UUID válido",
         )
+
+    reserva = db.query(ReservaModel).filter(ReservaModel.id_reserva == id_reserva).first()
+    if reserva is None:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+
+    if getattr(reserva, "activo", True) is False:
+        raise HTTPException(status_code=400, detail="La reserva ya está eliminada")
+
+    try:
+        # Eliminación lógica
+        setattr(reserva, "activo", False)
+        db.commit()
+        return {"message": "Reserva eliminada exitosamente"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error al eliminar reserva: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al eliminar la reserva",
+        )
+
+
+@reservas.get("/reservas/consultar/{id_reserva}")
+async def obtener_reserva(id_reserva: str, db: Session = Depends(get_db)):
+    """Obtiene una reserva por su ID"""
+    try:
+        _ = UUID(id_reserva)
+    except (ValueError, ValidationError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El ID de la reserva no es un UUID válido",
+        )
+
+    reserva = db.query(ReservaModel).filter(ReservaModel.id_reserva == id_reserva).first()
+    if reserva is None:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+
+    data = {
+        "id": str(reserva.id_reserva),
+        "id_proveedor": str(reserva.id_proveedor) if getattr(reserva, "id_proveedor", None) else None,
+        "id_servicio": str(reserva.id_servicio) if getattr(reserva, "id_servicio", None) else None,
+        "id_mayorista": str(reserva.id_mayorista) if getattr(reserva, "id_mayorista", None) else None,
+        "nombre_servicio": reserva.nombre_servicio,
+        "descripcion": reserva.descripcion,
+        "tipo_servicio": reserva.tipo_servicio,
+        "precio": reserva.precio,
+        "ciudad": reserva.ciudad,
+        "activo": reserva.activo,
+        "estado": reserva.estado,
+        "observaciones": reserva.observaciones,
+        "fecha_creacion": reserva.fecha_creacion,
+        "fecha_inicio": reserva.fecha_inicio,
+        "fecha_fin": reserva.fecha_fin,
+        "cantidad": reserva.cantidad,
+    }
+
+    return data
 
 # Endpoint de Health Check
 @reservas.get("/reservas/healthchecker")
